@@ -12,3 +12,11 @@ Serve this folder from any static HTTPS host (GitHub Pages, Netlify, or your Com
 For server mode the CompreFace address must be HTTPS when the app itself is served over HTTPS (browsers block HTTP calls from HTTPS pages).
 
 `app.html` is the page body; `index.html` is the same content wrapped in a full HTML document. Edit `app.html` and regenerate `index.html` if you change it.
+
+## Android APK
+
+`../android` wraps this folder in a WebView app (camera or gallery photo picking, works offline, server mode may use plain http). Build with the Android SDK installed:
+
+```
+cd android && gradle assembleDebug   # app/build/outputs/apk/debug/app-debug.apk
+```

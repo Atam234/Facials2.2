@@ -1,0 +1,30 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'app.tugma.facecompare'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'app.tugma.facecompare'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    // The web app in ../mobile is bundled as-is, so the APK and the hosted page share one source.
+    sourceSets.main.assets.srcDirs = ['../../mobile']
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// The app is plain Java; coroutines only arrive transitively and are never used.
+configurations.configureEach { exclude group: 'org.jetbrains.kotlinx' }
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.core:core:1.13.1'
+}
