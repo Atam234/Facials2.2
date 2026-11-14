@@ -197,26 +197,37 @@ footer { font-size: 12.5px; color: var(--muted); text-align: center; }
     $('go').disabled = busy || !slots.a || !slots.b;
   }
 
+  // Weights are read from model/<name>.bin; hosts that cannot serve .bin files
+  // get the same bytes as base64 text in model/<name>.bin.txt.
+  function fetchWeights(name) {
+    var url = 'model/' + name + '.bin';
+    return fetch(url).then(function (r) { if (!r.ok) throw new Error('bin'); return r.arrayBuffer(); }).catch(function () {
+      return fetch(url + '.txt').then(function (r) { if (!r.ok) throw new Error('weights'); return r.text(); }).then(function (b64) {
+        var raw = atob(b64.trim()), bytes = new Uint8Array(raw.length);
+        for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+        return bytes.buffer;
+      });
+    });
+  }
+  function loadNet(net, name) {
+    return Promise.all([
+      fetch('model/' + name + '-weights_manifest.json').then(function (r) { if (!r.ok) throw new Error('manifest'); return r.json(); }),
+      fetchWeights(name)
+    ]).then(function (got) {
+      var specs = [];
+      got[0].forEach(function (group) { specs = specs.concat(group.weights); });
+      net.loadFromWeightMap(faceapi.tf.io.decodeWeights(got[1], specs));
+    });
+  }
+
   function loadModels() {
     if (modelsReady) return modelsReady;
     if (typeof faceapi === 'undefined') return Promise.reject(new Error('nolib'));
     setStatus('Nilo-load ang face model (mga 12 MB, isang beses lang)…');
-    // Hosts that cannot serve .bin files get the same weights as base64 text (<name>.bin.txt).
-    faceapi.env.monkeyPatch({ fetch: function (url, init) {
-      var direct = fetch(url, init);
-      if (!/\.bin$/.test(String(url))) return direct;
-      return direct.then(function (r) { if (!r.ok) throw new Error('bin'); return r; }).catch(function () {
-        return fetch(url + '.txt').then(function (r) { if (!r.ok) throw new Error('weights'); return r.text(); }).then(function (b64) {
-          var raw = atob(b64.trim()), bytes = new Uint8Array(raw.length);
-          for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-          return new Response(bytes);
-        });
-      });
-    } });
     modelsReady = Promise.all([
-      faceapi.nets.ssdMobilenetv1.loadFromUri('model'),
-      faceapi.nets.faceLandmark68Net.loadFromUri('model'),
-      faceapi.nets.faceRecognitionNet.loadFromUri('model')
+      loadNet(faceapi.nets.ssdMobilenetv1, 'ssd_mobilenetv1_model'),
+      loadNet(faceapi.nets.faceLandmark68Net, 'face_landmark_68_model'),
+      loadNet(faceapi.nets.faceRecognitionNet, 'face_recognition_model')
     ]).then(function () { if (!busy) setStatus('Handa na.'); });
     modelsReady.catch(function () { modelsReady = null; });
     return modelsReady;
