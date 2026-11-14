@@ -1,0 +1,9 @@
+{
+  "name": "Tugma Face Compare",
+  "short_name": "Tugma",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0f171d",
+  "theme_color": "#0b6e8a",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

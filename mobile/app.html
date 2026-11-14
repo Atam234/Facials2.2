@@ -1,0 +1,377 @@
+<title>Tugma Face Compare</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: one narrow column, two ID-photo slots side by side, verdict gauge below. */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --ink: #14212b;
+  --muted: #5b6b78;
+  --line: #cfd7de;
+  --accent: #0b6e8a;
+  --accent-ink: #ffffff;
+  --match: #1a7f4e;
+  --nomatch: #b3352b;
+  --display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f171d; --surface: #18232b; --ink: #e6edf2; --muted: #94a5b1; --line: #2c3b46;
+    --accent: #4fb6d1; --accent-ink: #08222b; --match: #4cc58a; --nomatch: #f0796d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f171d; --surface: #18232b; --ink: #e6edf2; --muted: #94a5b1; --line: #2c3b46;
+  --accent: #4fb6d1; --accent-ink: #08222b; --match: #4cc58a; --nomatch: #f0796d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 15px; line-height: 1.5;
+}
+.app {
+  max-width: 520px; margin: 0 auto;
+  padding-block: 20px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 18px;
+}
+header { display: flex; flex-direction: column; gap: 4px; }
+h1 { font-family: var(--display); font-size: 26px; line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--muted); }
+
+.modes { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.modes button {
+  font: 600 14px var(--body); padding: 11px 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer;
+}
+.modes button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+.server { display: flex; flex-direction: column; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+.server label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.server input {
+  font: 15px var(--body); padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--ink); width: 100%; min-width: 0;
+}
+.server small { color: var(--muted); font-size: 13px; }
+
+.slots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.slot { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.slot .tag { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.frame {
+  position: relative; aspect-ratio: 4 / 5; max-width: 100%;
+  border: 1.5px dashed var(--line); border-radius: 10px; background: var(--surface);
+  display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer;
+}
+.frame.filled { border-style: solid; }
+.frame canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+.frame .hint { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px; text-align: center; color: var(--muted); font-size: 13px; }
+.frame .hint svg { width: 44px; height: 44px; }
+.frame input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.frame:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.slot .note { font-size: 12.5px; color: var(--muted); min-height: 1.5em; }
+.slot .note.bad { color: var(--nomatch); }
+
+.go {
+  font: 700 17px var(--display); padding: 15px; border: 0; border-radius: 10px;
+  background: var(--accent); color: var(--accent-ink); cursor: pointer; width: 100%;
+}
+.go:disabled { opacity: 0.45; cursor: not-allowed; }
+.go:focus-visible, .modes button:focus-visible, .server input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.status { font-size: 13px; color: var(--muted); text-align: center; min-height: 1.5em; margin: -8px 0; }
+.status.bad { color: var(--nomatch); }
+
+.result { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.verdict { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.verdict strong { font-family: var(--display); font-size: 24px; line-height: 1.1; }
+.verdict .pct { font-family: var(--display); font-size: 24px; font-variant-numeric: tabular-nums; }
+.result.match .verdict { color: var(--match); }
+.result.nomatch .verdict { color: var(--nomatch); }
+.gauge { position: relative; height: 12px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); }
+.gauge i { position: absolute; inset: 0 auto 0 0; border-radius: 6px; background: currentColor; }
+.result.match .gauge { color: var(--match); }
+.result.nomatch .gauge { color: var(--nomatch); }
+.gauge b { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--ink); }
+.scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.result p { margin: 0; font-size: 13px; color: var(--muted); }
+footer { font-size: 12.5px; color: var(--muted); text-align: center; }
+</style>
+
+<div class="app">
+  <header>
+    <h1>Tugma Face Compare</h1>
+    <p>Maglagay ng dalawang litrato para malaman kung iisang tao ang nasa mga ito.</p>
+  </header>
+
+  <div class="modes" role="group" aria-label="Paraan ng pag-compare">
+    <button type="button" id="mode-local" aria-pressed="true">Sa phone mismo</button>
+    <button type="button" id="mode-server" aria-pressed="false">CompreFace server</button>
+  </div>
+
+  <section class="server" id="server-panel" hidden>
+    <label for="server-url">Address ng server
+      <input id="server-url" type="url" inputmode="url" autocomplete="off" placeholder="https://compreface.halimbawa.com">
+    </label>
+    <label for="server-key">API key ng Verification service
+      <input id="server-key" type="password" autocomplete="off" placeholder="00000000-0000-0000-0000-000000000000">
+    </label>
+    <small>Gumawa ng Verification service sa CompreFace admin at kopyahin ang API key nito. Ipapadala ang dalawang litrato sa server na ito.</small>
+  </section>
+
+  <div class="slots">
+    <div class="slot">
+      <span class="tag">Litrato A</span>
+      <div class="frame" id="frame-a">
+        <div class="hint">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="24" cy="18" r="8"/><path d="M8 42c2-9 8-13 16-13s14 4 16 13"/></svg>
+          <span>Pindutin para kumuha o pumili ng litrato</span>
+        </div>
+        <input id="file-a" type="file" accept="image/*" aria-label="Pumili ng litrato A">
+      </div>
+      <span class="note" id="note-a"></span>
+    </div>
+    <div class="slot">
+      <span class="tag">Litrato B</span>
+      <div class="frame" id="frame-b">
+        <div class="hint">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="24" cy="18" r="8"/><path d="M8 42c2-9 8-13 16-13s14 4 16 13"/></svg>
+          <span>Pindutin para kumuha o pumili ng litrato</span>
+        </div>
+        <input id="file-b" type="file" accept="image/*" aria-label="Pumili ng litrato B">
+      </div>
+      <span class="note" id="note-b"></span>
+    </div>
+  </div>
+
+  <button type="button" class="go" id="go" disabled>I-compare</button>
+  <div class="status" id="status" role="status"></div>
+
+  <section class="result" id="result" hidden aria-live="polite">
+    <div class="verdict"><strong id="verdict"></strong><span class="pct" id="pct"></span></div>
+    <div class="gauge"><i id="bar"></i><b id="tick"></b></div>
+    <div class="scale"><span>0%</span><span id="tick-label"></span><span>100%</span></div>
+    <p id="detail"></p>
+  </section>
+
+  <footer id="foot">Sa mode na "Sa phone mismo", hindi umaalis sa telepono mo ang mga litrato. Gabay lang ang resulta at hindi patunay ng pagkakakilanlan.</footer>
+</div>
+
+<script src="face-api.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var MAX_SIDE = 1024;
+  var LOCAL_MATCH_DISTANCE = 0.6;   // face-api descriptor distance below this = same person
+  var SERVER_THRESHOLD = 0.5;       // CompreFace recommended similarity threshold
+  var mode = 'local';
+  var slots = { a: null, b: null }; // { canvas, descriptor, box }
+  var modelsReady = null;
+  var busy = false;
+
+  function store(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function load(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+
+  function setStatus(text, bad) {
+    $('status').textContent = text || '';
+    $('status').className = 'status' + (bad ? ' bad' : '');
+  }
+  function setNote(id, text, bad) {
+    $('note-' + id).textContent = text || '';
+    $('note-' + id).className = 'note' + (bad ? ' bad' : '');
+  }
+  function refreshButton() {
+    $('go').disabled = busy || !slots.a || !slots.b;
+  }
+
+  function loadModels() {
+    if (modelsReady) return modelsReady;
+    if (typeof faceapi === 'undefined') return Promise.reject(new Error('nolib'));
+    setStatus('Nilo-load ang face model (mga 12 MB, isang beses lang)…');
+    modelsReady = Promise.all([
+      faceapi.nets.ssdMobilenetv1.loadFromUri('model'),
+      faceapi.nets.faceLandmark68Net.loadFromUri('model'),
+      faceapi.nets.faceRecognitionNet.loadFromUri('model')
+    ]).then(function () { if (!busy) setStatus('Handa na.'); });
+    modelsReady.catch(function () { modelsReady = null; });
+    return modelsReady;
+  }
+
+  function fileToCanvas(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        var s = Math.min(1, MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+        var c = document.createElement('canvas');
+        c.width = Math.round(img.naturalWidth * s);
+        c.height = Math.round(img.naturalHeight * s);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        resolve(c);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('badimage')); };
+      img.src = url;
+    });
+  }
+
+  function show(id) {
+    var slot = slots[id], frame = $('frame-' + id);
+    var old = frame.querySelector('canvas');
+    if (old) old.remove();
+    var hint = frame.querySelector('.hint');
+    if (!slot) { hint.hidden = false; frame.classList.remove('filled'); return; }
+    hint.hidden = true; frame.classList.add('filled');
+    var view = document.createElement('canvas');
+    view.width = slot.canvas.width; view.height = slot.canvas.height;
+    var ctx = view.getContext('2d');
+    ctx.drawImage(slot.canvas, 0, 0);
+    if (slot.box) {
+      ctx.lineWidth = Math.max(3, view.width / 120);
+      ctx.strokeStyle = '#3fd0f0';
+      ctx.strokeRect(slot.box.x, slot.box.y, slot.box.width, slot.box.height);
+    }
+    frame.insertBefore(view, frame.querySelector('input'));
+  }
+
+  function describe(id) {
+    var slot = slots[id];
+    if (slot.descriptor) return Promise.resolve(slot);
+    return faceapi
+      .detectAllFaces(slot.canvas, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 }))
+      .withFaceLandmarks().withFaceDescriptors()
+      .then(function (found) {
+        if (!found.length) { setNote(id, 'Walang nakitang mukha. Subukan ang mas malinaw na litrato.', true); throw new Error('noface'); }
+        found.sort(function (p, q) { return q.detection.box.area - p.detection.box.area; });
+        slot.descriptor = found[0].descriptor;
+        slot.box = found[0].detection.box;
+        setNote(id, found.length > 1 ? found.length + ' mukha ang nakita; ang pinakamalaki ang ginamit.' : 'May nakitang mukha.');
+        show(id);
+        return slot;
+      });
+  }
+
+  function render(similarity, threshold, detail) {
+    var same = similarity >= threshold;
+    var pct = Math.round(similarity * 100);
+    $('result').hidden = false;
+    $('result').className = 'result ' + (same ? 'match' : 'nomatch');
+    $('verdict').textContent = same ? 'Iisang tao' : 'Magkaibang tao';
+    $('pct').textContent = pct + '%';
+    $('bar').style.width = Math.max(2, pct) + '%';
+    $('tick').style.left = 'calc(' + (threshold * 100) + '% - 1px)';
+    $('tick-label').textContent = 'hangganan ' + Math.round(threshold * 100) + '%';
+    $('detail').textContent = detail;
+    $('result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function compareLocal() {
+    return loadModels().then(function () {
+      setStatus('Sinusuri ang mga mukha…');
+      return describe('a').then(function () { return describe('b'); });
+    }).then(function () {
+      var d = faceapi.euclideanDistance(slots.a.descriptor, slots.b.descriptor);
+      // Map distance to a 0..1 score where the match cut-off (0.6) lands on 50%.
+      var sim = Math.max(0, Math.min(1, 1 - d / (2 * LOCAL_MATCH_DISTANCE)));
+      render(sim, 0.5, 'Sinuri sa loob ng telepono. Layo ng mga mukha: ' + d.toFixed(3) + ' (mas mababa sa ' + LOCAL_MATCH_DISTANCE + ' = iisang tao).');
+      setStatus('');
+    });
+  }
+
+  function toBlob(canvas) {
+    return new Promise(function (resolve) { canvas.toBlob(resolve, 'image/jpeg', 0.92); });
+  }
+
+  function compareServer() {
+    var base = $('server-url').value.trim().replace(/\/+$/, '');
+    var key = $('server-key').value.trim();
+    if (!base || !key) { setStatus('Ilagay muna ang address ng server at ang API key.', true); return Promise.resolve(); }
+    if (!/^https?:\/\//i.test(base)) base = 'https://' + base;
+    setStatus('Ipinapadala sa CompreFace server…');
+    return Promise.all([toBlob(slots.a.canvas), toBlob(slots.b.canvas)]).then(function (blobs) {
+      var fd = new FormData();
+      fd.append('source_image', blobs[0], 'a.jpg');
+      fd.append('target_image', blobs[1], 'b.jpg');
+      return fetch(base + '/api/v1/verification/verify?limit=1', { method: 'POST', headers: { 'x-api-key': key }, body: fd });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        if (!res.ok) {
+          var msg = body.message || ('HTTP ' + res.status);
+          if (res.status === 401 || res.status === 403) msg = 'Mali ang API key, o hindi ito para sa Verification service.';
+          else if (/no face/i.test(msg)) msg = 'Walang nakitang mukha sa isa sa mga litrato.';
+          setStatus('Sagot ng server: ' + msg, true);
+          return;
+        }
+        var matches = body.result && body.result[0] && body.result[0].face_matches;
+        if (!matches || !matches.length) { setStatus('Walang nakitang mukha sa litrato B.', true); return; }
+        render(matches[0].similarity, SERVER_THRESHOLD, 'Sinuri ng CompreFace server. Similarity: ' + matches[0].similarity.toFixed(4) + '.');
+        setStatus('');
+      });
+    }, function () {
+      setStatus('Hindi maabot ang server. Tiyaking online ito, HTTPS ang address, at na ang app na ito ay binuksan mula sa sarili mong host (hindi gumagana ang koneksyon sa server kapag nasa claude.ai).', true);
+    });
+  }
+
+  function compare() {
+    if (busy || !slots.a || !slots.b) return;
+    busy = true; refreshButton();
+    $('result').hidden = true;
+    var run = mode === 'local' ? compareLocal() : compareServer();
+    run.catch(function (e) {
+      if (e && e.message === 'noface') setStatus('Palitan ang litratong walang nakitang mukha.', true);
+      else if (e && e.message === 'nolib') setStatus('Hindi na-load ang face engine. I-refresh ang page.', true);
+      else setStatus('Hindi natapos ang pagsusuri. Subukan ulit.', true);
+    }).then(function () { busy = false; refreshButton(); });
+  }
+
+  function pick(id, input) {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    $('result').hidden = true;
+    fileToCanvas(file).then(function (canvas) {
+      slots[id] = { canvas: canvas, descriptor: null, box: null };
+      setNote(id, '');
+      show(id);
+      if (!busy) setStatus("");
+      refreshButton();
+    }, function () {
+      slots[id] = null; show(id);
+      setNote(id, 'Hindi mabasa ang file na ito. Pumili ng JPG o PNG.', true);
+      refreshButton();
+    });
+    input.value = '';
+  }
+
+  function setMode(next) {
+    mode = next;
+    $('mode-local').setAttribute('aria-pressed', String(next === 'local'));
+    $('mode-server').setAttribute('aria-pressed', String(next === 'server'));
+    $('server-panel').hidden = next !== 'server';
+    $('result').hidden = true;
+    setStatus('');
+    store('tugma.mode', next);
+    if (next === 'local') loadModels().catch(function () { setStatus('Hindi na-load ang face model. Tingnan ang koneksyon at i-refresh.', true); });
+  }
+
+  $('file-a').addEventListener('change', function () { pick('a', this); });
+  $('file-b').addEventListener('change', function () { pick('b', this); });
+  $('go').addEventListener('click', compare);
+  $('mode-local').addEventListener('click', function () { setMode('local'); });
+  $('mode-server').addEventListener('click', function () { setMode('server'); });
+  $('server-url').value = load('tugma.url');
+  $('server-key').value = load('tugma.key');
+  $('server-url').addEventListener('change', function () { store('tugma.url', this.value.trim()); });
+  $('server-key').addEventListener('change', function () { store('tugma.key', this.value.trim()); });
+
+  setMode(load('tugma.mode') === 'server' ? 'server' : 'local');
+
+  // Offline support when hosted on your own site (ignored where service workers are not allowed).
+  try {
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    }
+  } catch (e) {}
+})();
+</script>
